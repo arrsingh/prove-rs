@@ -26,6 +26,8 @@ const VALIDATE_PHONE_URL_UAT: &str = "https://platform.uat.proveapis.com/v3/vali
 const VALIDATE_PHONE_URL_PROD: &str = "https://platform.proveapis.com/v3/validate";
 const SUBMIT_CHALLENGE_URL_UAT: &str = "https://platform.uat.proveapis.com/v3/challenge";
 const SUBMIT_CHALLENGE_URL_PROD: &str = "https://platform.proveapis.com/v3/challenge";
+const COMPLETE_FLOW_URL_UAT: &str = "https://platform.uat.proveapis.com/v3/complete";
+const COMPLETE_FLOW_URL_PROD: &str = "https://platform.proveapis.com/v3/complete";
 const CLIENT_ID: &str = "client_id";
 const CLIENT_SECRET: &str = "client_secret";
 const GRANT_TYPE: &str = "grant_type";
@@ -57,6 +59,13 @@ impl Environment {
         match self {
             Environment::UAT => SUBMIT_CHALLENGE_URL_UAT,
             Environment::PROD => SUBMIT_CHALLENGE_URL_PROD,
+        }
+    }
+
+    pub fn get_complete_flow_url(&self) -> &str {
+        match self {
+            Environment::UAT => COMPLETE_FLOW_URL_UAT,
+            Environment::PROD => COMPLETE_FLOW_URL_PROD,
         }
     }
 }
@@ -180,47 +189,17 @@ impl ProveClient {
                     .to_string(),
             );
         }
-        let json;
-        match serde_json::to_string(req_params) {
-            Err(e) => {
-                return Err(e.to_string());
-            }
-            Ok(json_string) => {
-                json = json_string;
-            }
-        }
 
-        let req = self
-            .http_client
-            .post(self.env.get_start_flow_url())
-            .body(json)
-            .header(AUTHORIZATION, self.get_auth_header_val())
-            .header(ACCEPT, "application/json")
-            .header(CONTENT_TYPE, "application/json")
-            .build();
-
-        match req {
+        let response = self.exec_http_request::<StartParams, StartResponse>(
+            self.env.get_start_flow_url(),
+            &req_params,
+        );
+        match response {
+            Err(e) => return Err(e),
             Ok(r) => {
-                let response;
-                match self.http_client.execute(r) {
-                    Err(e) => return Err(e.to_string()),
-                    Ok(r) => response = r,
-                }
-                if !response.status().is_success() {
-                    return Err(response.text().unwrap());
-                }
-                match response.json() {
-                    Err(e) => return Err(e.to_string()),
-                    Ok(json) => {
-                        let r_json: StartResponse = json;
-                        self.auth_token = Some(r_json.auth_token.clone());
-                        self.correlation_id = Some(r_json.correlation_id.clone());
-                        return Ok(r_json);
-                    }
-                }
-            }
-            Err(e) => {
-                return Err(e.to_string());
+                self.auth_token = Some(r.auth_token.clone());
+                self.correlation_id = Some(r.correlation_id.clone());
+                return Ok(r);
             }
         }
     }
@@ -236,7 +215,10 @@ impl ProveClient {
             final_target_url: self.get_final_target_url(),
         };
 
-        return self.exec_http_request::<ValidateParams, ValidateResponse>(&req_params);
+        return self.exec_http_request::<ValidateParams, ValidateResponse>(
+            self.env.get_validate_phone_url(),
+            &req_params,
+        );
     }
 
     pub fn submit_challenge(&mut self) -> Result<SubmitChallengeResponse, String> {
@@ -248,8 +230,10 @@ impl ProveClient {
             correlation_id: self.correlation_id.clone().unwrap(),
         };
 
-        return self
-            .exec_http_request::<SubmitChallengeParams, SubmitChallengeResponse>(&req_params);
+        return self.exec_http_request::<SubmitChallengeParams, SubmitChallengeResponse>(
+            self.env.get_submit_challenge_url(),
+            &req_params,
+        );
     }
 
     pub fn complete_flow(&self, individual: Individual) -> Result<CompleteFlowResponse, String> {
@@ -262,11 +246,15 @@ impl ProveClient {
             individual,
         };
 
-        return self.exec_http_request::<CompleteFlowParams, CompleteFlowResponse>(&req_params);
+        return self.exec_http_request::<CompleteFlowParams, CompleteFlowResponse>(
+            self.env.get_complete_flow_url(),
+            &req_params,
+        );
     }
 
     fn exec_http_request<R: Serialize, V: DeserializeOwned>(
         &self,
+        url: &str,
         req_params: &R,
     ) -> Result<V, String> {
         let json;
@@ -281,7 +269,7 @@ impl ProveClient {
 
         let req = self
             .http_client
-            .post(self.env.get_validate_phone_url())
+            .post(url)
             .body(json)
             .header(AUTHORIZATION, self.get_auth_header_val())
             .header(ACCEPT, "application/json")
@@ -319,6 +307,7 @@ mod tests {
 
     use super::ProveClient;
     use crate::StartParams;
+
     //Set the clientId and client secret before running tests.
     //Remember to remove them before committing the code
     const CLIENT_ID: &str = "";
