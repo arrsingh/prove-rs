@@ -10,7 +10,7 @@ Add this to your Cargo.toml:
 
 ```toml
 [dependencies]
-prove-rs = "0.9.1"
+prove-rs = {path = "../path/to/prove-rs"}
 ```
 
 # Contributing
