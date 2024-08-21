@@ -2,7 +2,7 @@
 
 A Rust API Client for the Prove Identity API
 
-https://developer.prove.com/reference/status-and-error-codes
+https://developer.prove.com/reference/quick-start
 
 ## Usage
 
